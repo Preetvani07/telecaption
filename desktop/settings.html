@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0; padding: 24px;
+    background: #14181d; color: #e8eaed;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  h2 { margin: 0 0 18px; font-size: 18px; }
+  label { display: block; margin: 12px 0 4px; font-size: 13px; color: #9aa0a6; }
+  input, select {
+    width: 100%; box-sizing: border-box;
+    padding: 9px 10px; border-radius: 8px;
+    border: 1px solid #333a42; background: #1d232a; color: #fff;
+    font-size: 14px; outline: none;
+  }
+  input:focus { border-color: #4caf50; }
+  button {
+    margin-top: 20px; width: 100%; padding: 11px;
+    border: 0; border-radius: 8px; background: #4caf50; color: #fff;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  .hint { margin-top: 10px; font-size: 12px; color: #9aa0a6; line-height: 1.5; }
+</style>
+</head>
+<body>
+<h2>TeleCaption Settings</h2>
+<label>Relay server URL</label>
+<input id="server" placeholder="wss://my-relay.onrender.com">
+<label>Room code (same on phone)</label>
+<input id="room" placeholder="e.g. ayush123">
+<label>Font size</label>
+<input id="fontSize" type="number" min="16" max="96" value="34">
+<label>Overlay position</label>
+<select id="position">
+  <option value="bottom">Bottom of screen</option>
+  <option value="top">Top of screen</option>
+</select>
+<button id="save">Save & start overlay</button>
+<div class="hint">Overlay is click-through and never takes focus.<br>Toggle it with Ctrl/Cmd + Alt + T or the tray icon.</div>
+<script>
+  window.api.load().then(s => {
+    document.getElementById('server').value = s.server || '';
+    document.getElementById('room').value = s.room || '';
+    document.getElementById('fontSize').value = s.fontSize || 34;
+    document.getElementById('position').value = s.position || 'bottom';
+  });
+  document.getElementById('save').onclick = () => {
+    let server = document.getElementById('server').value.trim();
+    if (server && !server.includes('://')) server = 'wss://' + server;
+    window.api.save({
+      server,
+      room: document.getElementById('room').value.trim().toLowerCase(),
+      fontSize: parseInt(document.getElementById('fontSize').value, 10) || 34,
+      position: document.getElementById('position').value
+    });
+  };
+</script>
+</body>
+</html>

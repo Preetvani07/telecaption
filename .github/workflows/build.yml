@@ -1,0 +1,61 @@
+# Builds all distributables on GitHub — Android APK, Windows installer, macOS DMG.
+# Runs on every push; also manual via Actions → build-all → Run workflow.
+# Download from the run's Artifacts section.
+name: build-all
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10"
+      # Android SDK comes preinstalled on ubuntu runners; AGP downloads missing pieces
+      - run: gradle assembleDebug
+        working-directory: android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TeleCaption-android
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-fund --no-audit
+        working-directory: desktop
+      - run: npx electron-builder --win nsis
+        working-directory: desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TeleCaption-windows
+          path: desktop/dist/*.exe
+
+  macos-dmg:
+    runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false" # unsigned build, skip code signing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-fund --no-audit
+        working-directory: desktop
+      - run: npm run dist:mac
+        working-directory: desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TeleCaption-mac
+          path: desktop/dist/*.dmg

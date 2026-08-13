@@ -1,0 +1,69 @@
+stages:
+  - build
+
+# Android debug APK — sideload-ready (debug-signed, installs directly)
+android-apk:
+  stage: build
+  image: gradle:8.10-jdk17
+  variables:
+    ANDROID_HOME: "$CI_PROJECT_DIR/.android-sdk"
+    GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle-home"
+  before_script:
+    - mkdir -p "$ANDROID_HOME/cmdline-tools"
+    - wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/tools.zip
+    - unzip -q -o /tmp/tools.zip -d "$ANDROID_HOME/cmdline-tools"
+    - mv -T "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest" || true
+    - yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+  script:
+    - cd android
+    - gradle assembleDebug --no-daemon
+  artifacts:
+    name: TeleCaption-android
+    paths:
+      - android/app/build/outputs/apk/debug/app-debug.apk
+    expire_in: 30 days
+  cache:
+    key: android
+    paths:
+      - .gradle-home/caches/
+      - .android-sdk/
+
+# Windows installer — built on Linux runner via wine (free tier OK)
+windows-exe:
+  stage: build
+  image: electronuserland/builder:wine
+  script:
+    - cd desktop
+    - npm install --no-fund --no-audit
+    - npx electron-builder --win nsis
+  artifacts:
+    name: TeleCaption-windows
+    paths:
+      - desktop/dist/*.exe
+    expire_in: 30 days
+  cache:
+    key: desktop
+    paths:
+      - desktop/node_modules/
+
+# macOS DMG — needs GitLab Premium (SaaS macOS runners are paid tier only).
+# Free alternative: mirror repo to GitHub, run .github/workflows/mac-build.yml.
+macos-dmg:
+  stage: build
+  tags:
+    - saas-macos-medium-m1
+  image: macos-14-xcode-15
+  rules:
+    - when: manual
+  allow_failure: true
+  variables:
+    CSC_IDENTITY_AUTO_DISCOVERY: "false"
+  script:
+    - cd desktop
+    - npm install --no-fund --no-audit
+    - npm run dist:mac
+  artifacts:
+    name: TeleCaption-macos
+    paths:
+      - desktop/dist/*.dmg
+    expire_in: 30 days

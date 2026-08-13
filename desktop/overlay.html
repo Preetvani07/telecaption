@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body {
+    margin: 0; height: 100%;
+    background: transparent;
+    overflow: hidden;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    pointer-events: none;
+    user-select: none;
+  }
+  #wrap {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    display: flex; justify-content: center;
+    padding: 8px 40px;
+    transition: opacity .5s ease;
+    opacity: 0;
+  }
+  #wrap.top { top: 0; bottom: auto; }
+  #box {
+    max-width: 86%;
+    background: rgba(10, 10, 12, .74);
+    border-radius: 14px;
+    padding: 12px 28px;
+    text-align: center;
+  }
+  #final {
+    color: #ffffff; font-weight: 600; line-height: 1.3;
+    text-shadow: 0 2px 8px rgba(0,0,0,.9);
+  }
+  #partial {
+    color: #ffd54f; font-weight: 600; line-height: 1.3;
+    text-shadow: 0 2px 8px rgba(0,0,0,.9);
+  }
+  #stat {
+    position: absolute; top: 4px; right: 14px;
+    color: rgba(255,255,255,.45); font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<div id="stat"></div>
+<div id="wrap"><div id="box"><div id="final"></div><div id="partial"></div></div></div>
+<script>
+  const q = new URLSearchParams(location.search);
+  const server = q.get('server');
+  const room = (q.get('room') || '').trim().toLowerCase();
+  const fontSize = parseInt(q.get('fontSize') || '34', 10);
+  const wrap = document.getElementById('wrap');
+  const finalEl = document.getElementById('final');
+  const partialEl = document.getElementById('partial');
+  const statEl = document.getElementById('stat');
+  if (q.get('position') === 'top') wrap.classList.add('top');
+  finalEl.style.fontSize = fontSize + 'px';
+  partialEl.style.fontSize = fontSize + 'px';
+
+  let lastFinal = '';
+  let partial = '';
+  let fadeTimer = null;
+  let lastSeq = -1;
+
+  function render() {
+    finalEl.textContent = lastFinal;
+    partialEl.textContent = partial;
+    finalEl.style.display = lastFinal ? '' : 'none';
+    partialEl.style.display = partial ? '' : 'none';
+    if (lastFinal || partial) {
+      wrap.style.opacity = '1';
+      clearTimeout(fadeTimer);
+      fadeTimer = setTimeout(() => { wrap.style.opacity = '0'; }, 6000);
+    }
+  }
+
+  function onCaption(m) {
+    // ignore stale out-of-order partials after a reconnect reset
+    if (typeof m.seq === 'number') {
+      if (m.seq < lastSeq && lastSeq - m.seq < 1000) return;
+      lastSeq = m.seq;
+    }
+    const text = (m.text || '').trim();
+    if (!text) return;
+    if (m.final) {
+      lastFinal = text;
+      partial = '';
+    } else {
+      partial = text;
+    }
+    render();
+  }
+
+  let ws = null;
+  function connect() {
+    statEl.textContent = 'connecting…';
+    try { ws = new WebSocket(server); } catch (e) {
+      statEl.textContent = 'bad relay URL';
+      return;
+    }
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'join', room, role: 'viewer' }));
+      statEl.textContent = '';
+    };
+    ws.onmessage = (e) => {
+      let m;
+      try { m = JSON.parse(e.data); } catch { return; }
+      if (m.type === 'caption') onCaption(m);
+    };
+    ws.onclose = () => {
+      statEl.textContent = 'reconnecting…';
+      setTimeout(connect, 1500);
+    };
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  }
+  connect();
+</script>
+</body>
+</html>

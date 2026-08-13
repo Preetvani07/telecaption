@@ -1,0 +1,34 @@
+{
+  "name": "telecaption-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TeleCaption overlay — live captions from your phone, on top of any app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis",
+    "dist:mac": "electron-builder --mac dmg"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.telecaption.desktop",
+    "productName": "TeleCaption",
+    "files": [
+      "main.js",
+      "preload.js",
+      "overlay.html",
+      "settings.html",
+      "assets/**"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
