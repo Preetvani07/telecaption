@@ -47,30 +47,45 @@
   const q = new URLSearchParams(location.search);
   const server = q.get('server');
   const room = (q.get('room') || '').trim().toLowerCase();
-  const fontSize = parseInt(q.get('fontSize') || '34', 10);
   const wrap = document.getElementById('wrap');
   const finalEl = document.getElementById('final');
   const partialEl = document.getElementById('partial');
   const statEl = document.getElementById('stat');
   if (q.get('position') === 'top') wrap.classList.add('top');
-  finalEl.style.fontSize = fontSize + 'px';
-  partialEl.style.fontSize = fontSize + 'px';
+
+  let fontSize = parseInt(q.get('fontSize') || '34', 10);
+  let durationMs = parseInt(q.get('duration') || '6', 10) * 1000; // 0 = never fade
+
+  function applyCfg(c) {
+    if (c.fontSize) fontSize = c.fontSize;
+    if (c.duration !== undefined) durationMs = (c.duration > 0 ? c.duration * 1000 : 0);
+    finalEl.style.fontSize = fontSize + 'px';
+    partialEl.style.fontSize = fontSize + 'px';
+    armFade();
+  }
+  applyCfg({});
+  if (window.cfg) window.cfg.onUpdate(applyCfg);
 
   let lastFinal = '';
   let partial = '';
   let fadeTimer = null;
   let lastSeq = -1;
 
+  function armFade() {
+    clearTimeout(fadeTimer);
+    if (!lastFinal && !partial) return;
+    wrap.style.opacity = '1';
+    if (durationMs > 0) {
+      fadeTimer = setTimeout(() => { wrap.style.opacity = '0'; }, durationMs);
+    }
+  }
+
   function render() {
     finalEl.textContent = lastFinal;
     partialEl.textContent = partial;
     finalEl.style.display = lastFinal ? '' : 'none';
     partialEl.style.display = partial ? '' : 'none';
-    if (lastFinal || partial) {
-      wrap.style.opacity = '1';
-      clearTimeout(fadeTimer);
-      fadeTimer = setTimeout(() => { wrap.style.opacity = '0'; }, 6000);
-    }
+    armFade();
   }
 
   function onCaption(m) {

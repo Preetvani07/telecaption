@@ -4,21 +4,25 @@ const path = require('path');
 
 let overlay = null;
 let settingsWin = null;
+let panel = null;
 let tray = null;
 let overlayVisible = true;
 
 const OVERLAY_HEIGHT = 220;
+const PANEL_W = 300;
+const PANEL_H = 500;
+
+const DEFAULTS = { server: '', room: '', fontSize: 34, duration: 6, position: 'bottom' };
 
 function settingsFile() {
   return path.join(app.getPath('userData'), 'settings.json');
 }
 
 function loadSettings() {
-  const defaults = { server: '', room: '', fontSize: 34, position: 'bottom' };
   try {
-    return Object.assign(defaults, JSON.parse(fs.readFileSync(settingsFile(), 'utf8')));
+    return Object.assign({}, DEFAULTS, JSON.parse(fs.readFileSync(settingsFile(), 'utf8')));
   } catch {
-    return defaults;
+    return Object.assign({}, DEFAULTS);
   }
 }
 
@@ -52,7 +56,11 @@ function createOverlay() {
     hasShadow: false,
     show: false,
     type: process.platform === 'darwin' ? 'panel' : undefined,
-    webPreferences: { contextIsolation: true }
+    webPreferences: {
+      contextIsolation: true,
+      backgroundThrottling: false, // captions must render even though window is never focused
+      preload: path.join(__dirname, 'overlay-preload.js')
+    }
   });
 
   overlay.setAlwaysOnTop(true, 'screen-saver');
@@ -63,6 +71,7 @@ function createOverlay() {
       server: s.server,
       room: s.room,
       fontSize: String(s.fontSize),
+      duration: String(s.duration),
       position: s.position
     }
   });
@@ -71,11 +80,18 @@ function createOverlay() {
   });
 }
 
+// screen recorders / meeting apps grab topmost — take it back periodically
+setInterval(() => {
+  if (overlay && !overlay.isDestroyed() && overlayVisible) {
+    overlay.setAlwaysOnTop(true, 'screen-saver');
+  }
+}, 4000);
+
 function openSettings() {
-  if (settingsWin) { settingsWin.focus(); return; }
+  if (settingsWin) { settingsWin.show(); settingsWin.focus(); return; }
   settingsWin = new BrowserWindow({
     width: 440,
-    height: 420,
+    height: 500,
     resizable: false,
     title: 'TeleCaption Settings',
     webPreferences: {
@@ -86,6 +102,30 @@ function openSettings() {
   settingsWin.removeMenu();
   settingsWin.loadFile('settings.html');
   settingsWin.on('closed', () => { settingsWin = null; });
+}
+
+function togglePanel() {
+  if (panel) { panel.close(); return; }
+  const wa = screen.getPrimaryDisplay().workArea;
+  panel = new BrowserWindow({
+    width: PANEL_W,
+    height: PANEL_H,
+    x: wa.x + wa.width - PANEL_W - 12,
+    y: wa.y + Math.round((wa.height - PANEL_H) / 2),
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true
+    }
+  });
+  panel.setAlwaysOnTop(true, 'screen-saver');
+  panel.loadFile('panel.html');
+  panel.once('ready-to-show', () => panel.show());
+  panel.on('closed', () => { panel = null; });
 }
 
 function toggleOverlay() {
@@ -108,25 +148,48 @@ function buildTray() {
   tray.setToolTip('TeleCaption');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Settings…', click: openSettings },
-    { label: overlayVisible ? 'Hide overlay' : 'Show overlay', click: toggleOverlay },
+    { label: 'Control panel  (Ctrl+Alt+U)', click: togglePanel },
+    { label: (overlayVisible ? 'Hide' : 'Show') + ' captions  (Ctrl+Alt+T)', click: toggleOverlay },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() }
   ]));
+  tray.on('double-click', openSettings);
 }
 
 ipcMain.handle('load-settings', () => loadSettings());
+
 ipcMain.on('save-settings', (e, s) => {
-  saveSettings(s);
+  saveSettings(Object.assign(loadSettings(), s));
   createOverlay();
   if (settingsWin) settingsWin.close();
 });
 
-app.whenReady().then(() => {
-  const s = loadSettings();
-  buildTray();
-  globalShortcut.register('CommandOrControl+Alt+T', toggleOverlay);
-  if (!s.server || !s.room) openSettings(); else createOverlay();
+// live tweaks from the control panel — applied without recreating the overlay
+ipcMain.on('update-cfg', (e, patch) => {
+  const merged = Object.assign(loadSettings(), patch);
+  saveSettings(merged);
+  if (patch.position !== undefined) { createOverlay(); return; }
+  if (overlay && !overlay.isDestroyed()) overlay.webContents.send('cfg', merged);
 });
+
+ipcMain.on('close-panel', () => { if (panel) panel.close(); });
+ipcMain.on('toggle-captions', toggleOverlay);
+
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  // relaunching the installed app while it runs in tray → bring the UI up
+  app.on('second-instance', () => openSettings());
+
+  app.whenReady().then(() => {
+    buildTray();
+    globalShortcut.register('CommandOrControl+Alt+T', toggleOverlay);
+    globalShortcut.register('CommandOrControl+Alt+U', togglePanel);
+    openSettings();   // UI shows on every launch
+    createOverlay();  // captions start alongside if already configured
+  });
+}
 
 // tray app: keep running when all windows closed
 app.on('window-all-closed', () => {});

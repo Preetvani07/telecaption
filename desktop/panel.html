@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body {
+    margin: 0; height: 100%;
+    background: #14181d; color: #e8eaed;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    user-select: none; overflow: hidden;
+  }
+  #panel { padding: 16px 18px; display: flex; flex-direction: column; height: calc(100% - 32px); }
+  #head { display: flex; align-items: center; margin-bottom: 14px; }
+  #head h2 { flex: 1; margin: 0; font-size: 16px; }
+  .iconbtn {
+    width: 28px; height: 28px; margin-left: 6px;
+    border: 0; border-radius: 6px; cursor: pointer;
+    background: #232a31; color: #e8eaed; font-size: 14px; font-weight: 700;
+  }
+  .iconbtn:hover { background: #2e363e; }
+  label { display: block; margin: 14px 0 4px; font-size: 13px; color: #9aa0a6; }
+  .val { float: right; color: #4caf50; font-weight: 600; }
+  input[type=range] { width: 100%; accent-color: #4caf50; }
+  .btn {
+    margin-top: 18px; width: 100%; padding: 10px;
+    border: 0; border-radius: 8px; cursor: pointer;
+    background: #232a31; color: #fff; font-size: 14px; font-weight: 600;
+  }
+  .btn:hover { background: #2e363e; }
+  .hint { margin-top: auto; font-size: 11px; color: #6b7278; line-height: 1.5; }
+
+  #shortcuts {
+    position: absolute; inset: 0;
+    background: rgba(10,12,14,.97);
+    padding: 18px; display: none;
+  }
+  #shortcuts.open { display: block; }
+  #shortcuts h3 { margin: 0 0 14px; font-size: 15px; }
+  #shortcuts table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #shortcuts td { padding: 7px 0; border-bottom: 1px solid #232a31; }
+  #shortcuts td:first-child { color: #ffd54f; white-space: nowrap; padding-right: 12px; }
+  #sc-close { position: absolute; top: 12px; right: 14px; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <div id="head">
+    <h2>Captions</h2>
+    <button class="iconbtn" id="help" title="Shortcuts">?</button>
+    <button class="iconbtn" id="close" title="Close panel">✕</button>
+  </div>
+
+  <label>Font size <span class="val" id="fsVal"></span></label>
+  <input type="range" id="fs" min="16" max="96" step="1">
+
+  <label>Caption stays on screen <span class="val" id="durVal"></span></label>
+  <input type="range" id="dur" min="0" max="30" step="1">
+
+  <button class="btn" id="toggleCap">Hide / show captions</button>
+
+  <div class="hint">
+    Changes apply instantly and are saved.<br>
+    Duration 0 = captions never fade.<br>
+    Ctrl/Cmd+Alt+U closes this panel.
+  </div>
+</div>
+
+<div id="shortcuts">
+  <button class="iconbtn" id="sc-close" title="Close">✕</button>
+  <h3>Keyboard shortcuts</h3>
+  <table>
+    <tr><td>Ctrl/Cmd + Alt + U</td><td>Show / hide this control panel</td></tr>
+    <tr><td>Ctrl/Cmd + Alt + T</td><td>Show / hide captions overlay</td></tr>
+  </table>
+</div>
+
+<script>
+  const fs = document.getElementById('fs');
+  const dur = document.getElementById('dur');
+  const fsVal = document.getElementById('fsVal');
+  const durVal = document.getElementById('durVal');
+
+  function labels() {
+    fsVal.textContent = fs.value + ' px';
+    durVal.textContent = dur.value === '0' ? 'always' : dur.value + ' s';
+  }
+
+  window.api.load().then(s => {
+    fs.value = s.fontSize;
+    dur.value = s.duration;
+    labels();
+  });
+
+  fs.oninput = () => { labels(); window.api.updateCfg({ fontSize: parseInt(fs.value, 10) }); };
+  dur.oninput = () => { labels(); window.api.updateCfg({ duration: parseInt(dur.value, 10) }); };
+
+  document.getElementById('toggleCap').onclick = () => window.api.toggleCaptions();
+  document.getElementById('close').onclick = () => window.api.closePanel();
+  document.getElementById('help').onclick = () => document.getElementById('shortcuts').classList.add('open');
+  document.getElementById('sc-close').onclick = () => document.getElementById('shortcuts').classList.remove('open');
+</script>
+</body>
+</html>

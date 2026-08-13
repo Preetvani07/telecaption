@@ -33,18 +33,23 @@
 <input id="room" placeholder="e.g. ayush123">
 <label>Font size</label>
 <input id="fontSize" type="number" min="16" max="96" value="34">
+<label>Caption stays on screen (seconds, 0 = never fade)</label>
+<input id="duration" type="number" min="0" max="30" value="6">
 <label>Overlay position</label>
 <select id="position">
   <option value="bottom">Bottom of screen</option>
   <option value="top">Top of screen</option>
 </select>
 <button id="save">Save & start overlay</button>
-<div class="hint">Overlay is click-through and never takes focus.<br>Toggle it with Ctrl/Cmd + Alt + T or the tray icon.</div>
+<div class="hint">Overlay is click-through and never takes focus.<br>
+Ctrl/Cmd + Alt + T — show/hide captions.<br>
+Ctrl/Cmd + Alt + U — control panel (live font/duration tweaks).</div>
 <script>
   window.api.load().then(s => {
     document.getElementById('server').value = s.server || '';
     document.getElementById('room').value = s.room || '';
     document.getElementById('fontSize').value = s.fontSize || 34;
+    document.getElementById('duration').value = (s.duration === undefined ? 6 : s.duration);
     document.getElementById('position').value = s.position || 'bottom';
   });
   document.getElementById('save').onclick = () => {
@@ -54,6 +59,7 @@
       server,
       room: document.getElementById('room').value.trim().toLowerCase(),
       fontSize: parseInt(document.getElementById('fontSize').value, 10) || 34,
+      duration: Math.max(0, parseInt(document.getElementById('duration').value, 10) || 0),
       position: document.getElementById('position').value
     });
   };

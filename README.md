@@ -25,7 +25,7 @@ Or Docker anywhere: `cd relay && docker build -t telecaption-relay . && docker r
 
 Local test: `cd relay && npm install && npm start` → `ws://localhost:8080`.
 
-> Note: Render free tier sleeps after idle — first connect takes ~30 s to wake. For zero cold start use a $5 instance or Fly.io.
+> Note: Render free tier sleeps after idle — first connect takes ~30 s to wake. Free fix: create an [UptimeRobot](https://uptimerobot.com) monitor pinging `https://<your-relay>.onrender.com` every 5 min — keeps it awake 24/7.
 
 ## 2. Desktop overlay (Windows & macOS)
 
@@ -37,9 +37,10 @@ npm start
 
 First run opens Settings: enter relay URL (`wss://…`) and a room code (any word — must match phone). Overlay appears at bottom of screen.
 
-- Tray icon → Settings / Hide overlay / Quit.
-- `Ctrl+Alt+T` (`Cmd+Alt+T` on Mac) toggles the overlay.
-- Overlay is click-through and unfocusable — type/click/game underneath freely.
+- Settings window opens on every launch; app keeps running in the tray when closed.
+- `Ctrl+Alt+T` (`Cmd+Alt+T` on Mac) — show/hide captions.
+- `Ctrl+Alt+U` (`Cmd+Alt+U` on Mac) — control panel (right side): live font size + caption duration sliders, `?` shows all shortcuts.
+- Overlay is click-through and unfocusable — type/click/game underneath freely; it re-asserts topmost every 4 s so recorders/meeting apps can't cover it.
 
 Build installers:
 
