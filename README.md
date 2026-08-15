@@ -37,10 +37,12 @@ npm start
 
 First run opens Settings: enter relay URL (`wss://…`) and a room code (any word — must match phone). Overlay appears at bottom of screen.
 
-- Settings window opens on every launch; app keeps running in the tray when closed.
-- `Ctrl+Alt+T` (`Cmd+Alt+T` on Mac) — show/hide captions.
-- `Ctrl+Alt+U` (`Cmd+Alt+U` on Mac) — control panel (right side): live font size + caption duration sliders, `?` shows all shortcuts.
-- Overlay is click-through and unfocusable — type/click/game underneath freely; it re-asserts topmost every 4 s so recorders/meeting apps can't cover it.
+- Settings window opens on every launch; app keeps running in the tray when closed (tray dot: green = captions on, gray = hidden).
+- `Ctrl+Alt+T` (`Cmd` on Mac) — show/hide captions; an eye indicator flashes to confirm the new state.
+- `Ctrl+Alt+U` — control panel: eye toggle, live font size + caption duration sliders, idle caption-box outline toggle, session logs (with copy button), `?` shortcuts.
+- `Ctrl+Alt+Q` — quit completely, including from background.
+- Idle "ghost" outline shows where captions will appear (dashed white; dashed red = relay unreachable). Click-through always — clicks pass to whatever is underneath.
+- Troubleshooting: control panel → Logs shows connection events (room joins, peer counts, relay retries). Server-side logs: Render dashboard → your service → Logs.
 
 Build installers:
 

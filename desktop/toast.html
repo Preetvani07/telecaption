@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  #t {
+    width: 128px; height: 118px; margin: 8px auto;
+    background: rgba(10, 12, 14, .88);
+    border-radius: 18px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    animation: pop .18s ease-out;
+  }
+  @keyframes pop { from { transform: scale(.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  #label { margin-top: 8px; font-size: 13px; font-weight: 600; }
+  svg { width: 52px; height: 52px; }
+</style>
+</head>
+<body>
+<div id="t">
+  <svg id="eye" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+  </svg>
+  <svg id="eyeoff" viewBox="0 0 24 24" fill="none" stroke="#f44336" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+    <line x1="2" y1="2" x2="22" y2="22"/>
+  </svg>
+  <div id="label"></div>
+</div>
+<script>
+  const on = new URLSearchParams(location.search).get('on') === '1';
+  document.getElementById('eye').style.display = on ? '' : 'none';
+  document.getElementById('eyeoff').style.display = on ? 'none' : '';
+  const label = document.getElementById('label');
+  label.textContent = on ? 'Captions ON' : 'Captions OFF';
+  label.style.color = on ? '#4caf50' : '#f44336';
+</script>
+</body>
+</html>

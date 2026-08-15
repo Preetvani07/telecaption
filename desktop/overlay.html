@@ -15,17 +15,28 @@
     position: absolute; left: 0; right: 0; bottom: 0;
     display: flex; justify-content: center;
     padding: 8px 40px;
-    transition: opacity .5s ease;
+    transition: opacity .4s ease;
     opacity: 0;
   }
   #wrap.top { top: 0; bottom: auto; }
   #box {
     max-width: 86%;
     background: rgba(10, 10, 12, .74);
+    border: 1px solid transparent;
     border-radius: 14px;
     padding: 12px 28px;
     text-align: center;
+    transition: background .3s, border-color .3s;
   }
+  /* idle placeholder — faint outline so you always know where captions land */
+  #box.ghost {
+    background: rgba(10, 10, 12, .18);
+    border: 1px dashed rgba(255, 255, 255, .45);
+    min-width: 320px;
+    min-height: 1.2em;
+  }
+  /* relay unreachable — red dashed border */
+  #box.offline { border: 1px dashed rgba(244, 67, 54, .85); }
   #final {
     color: #ffffff; font-weight: 600; line-height: 1.3;
     text-shadow: 0 2px 8px rgba(0,0,0,.9);
@@ -35,19 +46,18 @@
     text-shadow: 0 2px 8px rgba(0,0,0,.9);
   }
   #stat {
-    position: absolute; top: 4px; right: 14px;
-    color: rgba(255,255,255,.45); font-size: 12px;
+    color: rgba(255,255,255,.65); font-size: 13px;
   }
 </style>
 </head>
 <body>
-<div id="stat"></div>
-<div id="wrap"><div id="box"><div id="final"></div><div id="partial"></div></div></div>
+<div id="wrap"><div id="box"><div id="final"></div><div id="partial"></div><div id="stat"></div></div></div>
 <script>
   const q = new URLSearchParams(location.search);
   const server = q.get('server');
   const room = (q.get('room') || '').trim().toLowerCase();
   const wrap = document.getElementById('wrap');
+  const box = document.getElementById('box');
   const finalEl = document.getElementById('final');
   const partialEl = document.getElementById('partial');
   const statEl = document.getElementById('stat');
@@ -55,78 +65,106 @@
 
   let fontSize = parseInt(q.get('fontSize') || '34', 10);
   let durationMs = parseInt(q.get('duration') || '6', 10) * 1000; // 0 = never fade
+  let ghost = q.get('ghost') !== '0';
 
-  function applyCfg(c) {
-    if (c.fontSize) fontSize = c.fontSize;
-    if (c.duration !== undefined) durationMs = (c.duration > 0 ? c.duration * 1000 : 0);
-    finalEl.style.fontSize = fontSize + 'px';
-    partialEl.style.fontSize = fontSize + 'px';
-    armFade();
-  }
-  applyCfg({});
-  if (window.cfg) window.cfg.onUpdate(applyCfg);
+  const blog = (level, msg) => { try { window.bridge.log(level, msg); } catch {} };
 
   let lastFinal = '';
   let partial = '';
   let fadeTimer = null;
-  let lastSeq = -1;
+  let connected = false;
+  let gotCaption = false;
 
-  function armFade() {
+  function showIdle() {
     clearTimeout(fadeTimer);
-    if (!lastFinal && !partial) return;
-    wrap.style.opacity = '1';
-    if (durationMs > 0) {
-      fadeTimer = setTimeout(() => { wrap.style.opacity = '0'; }, durationMs);
-    }
+    finalEl.style.display = 'none';
+    partialEl.style.display = 'none';
+    box.classList.add('ghost');
+    wrap.style.opacity = (ghost || !connected) ? '0.55' : '0';
   }
 
-  function render() {
+  function showText() {
+    box.classList.remove('ghost');
     finalEl.textContent = lastFinal;
     partialEl.textContent = partial;
     finalEl.style.display = lastFinal ? '' : 'none';
     partialEl.style.display = partial ? '' : 'none';
-    armFade();
+    wrap.style.opacity = '1';
+    clearTimeout(fadeTimer);
+    if (durationMs > 0) {
+      fadeTimer = setTimeout(() => { lastFinal = ''; partial = ''; showIdle(); }, durationMs);
+    }
   }
 
+  function applyCfg(c) {
+    if (c.fontSize) fontSize = c.fontSize;
+    if (c.duration !== undefined) durationMs = c.duration > 0 ? c.duration * 1000 : 0;
+    if (c.ghost !== undefined) ghost = !!c.ghost;
+    finalEl.style.fontSize = fontSize + 'px';
+    partialEl.style.fontSize = fontSize + 'px';
+    if (lastFinal || partial) showText(); else showIdle();
+  }
+  applyCfg({});
+  if (window.bridge) window.bridge.onCfg(applyCfg);
+
+  // NOTE: no sequence-number gating here. The phone resets its counter on every
+  // STOP/START, and dropping "stale" numbers silently killed all captions.
+  // TCP + single relay connection already deliver messages in order.
   function onCaption(m) {
-    // ignore stale out-of-order partials after a reconnect reset
-    if (typeof m.seq === 'number') {
-      if (m.seq < lastSeq && lastSeq - m.seq < 1000) return;
-      lastSeq = m.seq;
-    }
     const text = (m.text || '').trim();
     if (!text) return;
-    if (m.final) {
-      lastFinal = text;
-      partial = '';
-    } else {
-      partial = text;
-    }
-    render();
+    if (!gotCaption) { gotCaption = true; blog('info', 'first caption received — captions flowing'); }
+    if (m.final) { lastFinal = text; partial = ''; } else { partial = text; }
+    showText();
   }
 
   let ws = null;
+  let failCount = 0;
   function connect() {
-    statEl.textContent = 'connecting…';
+    if (!connected) statEl.textContent = 'connecting…';
     try { ws = new WebSocket(server); } catch (e) {
       statEl.textContent = 'bad relay URL';
+      blog('error', 'bad relay URL: ' + server);
       return;
     }
     ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'join', room, role: 'viewer' }));
+      connected = true;
+      failCount = 0;
+      gotCaption = false;
+      box.classList.remove('offline');
       statEl.textContent = '';
+      statEl.style.display = 'none';
+      ws.send(JSON.stringify({ type: 'join', room, role: 'viewer' }));
+      blog('info', 'connected to relay');
+      if (!lastFinal && !partial) showIdle();
     };
     ws.onmessage = (e) => {
       let m;
       try { m = JSON.parse(e.data); } catch { return; }
       if (m.type === 'caption') onCaption(m);
+      else if (m.type === 'joined') {
+        blog('info', `joined room "${m.room}" — devices in room: ${m.peers}` +
+          (m.peers < 2 ? ' (phone not connected yet)' : ''));
+      }
     };
     ws.onclose = () => {
+      if (connected) blog('warn', 'lost relay connection — retrying');
+      else {
+        failCount++;
+        if (failCount === 1 || failCount % 20 === 0) {
+          blog('warn', `cannot reach relay (attempt ${failCount}) — free tier may be waking up (~30 s)`);
+        }
+      }
+      connected = false;
+      box.classList.add('offline');
+      statEl.style.display = '';
       statEl.textContent = 'reconnecting…';
+      if (!lastFinal && !partial) showIdle();
       setTimeout(connect, 1500);
     };
     ws.onerror = () => { try { ws.close(); } catch {} };
   }
+  blog('info', 'overlay window loaded');
   connect();
 </script>
 </body>

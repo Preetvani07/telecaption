@@ -5,14 +5,24 @@ const path = require('path');
 let overlay = null;
 let settingsWin = null;
 let panel = null;
+let toast = null;
 let tray = null;
 let overlayVisible = true;
 
 const OVERLAY_HEIGHT = 220;
 const PANEL_W = 300;
-const PANEL_H = 500;
+const PANEL_H = 560;
 
-const DEFAULTS = { server: '', room: '', fontSize: 34, duration: 6, position: 'bottom' };
+const DEFAULTS = { server: '', room: '', fontSize: 34, duration: 6, position: 'bottom', ghost: true };
+
+// ---- session log (ring buffer, important events only) ----
+const logs = [];
+function addLog(level, msg) {
+  const e = { t: new Date().toTimeString().slice(0, 8), level, msg };
+  logs.push(e);
+  if (logs.length > 300) logs.shift();
+  if (panel && !panel.isDestroyed()) panel.webContents.send('log-entry', e);
+}
 
 function settingsFile() {
   return path.join(app.getPath('userData'), 'settings.json');
@@ -33,7 +43,10 @@ function saveSettings(s) {
 function createOverlay() {
   const s = loadSettings();
   if (overlay) { overlay.destroy(); overlay = null; }
-  if (!s.server || !s.room) return; // not configured yet
+  if (!s.server || !s.room) {
+    addLog('warn', 'not configured yet — enter relay URL + room in Settings');
+    return;
+  }
 
   const wa = screen.getPrimaryDisplay().workArea;
   const y = s.position === 'top' ? wa.y : wa.y + wa.height - OVERLAY_HEIGHT;
@@ -72,12 +85,14 @@ function createOverlay() {
       room: s.room,
       fontSize: String(s.fontSize),
       duration: String(s.duration),
-      position: s.position
+      position: s.position,
+      ghost: s.ghost ? '1' : '0'
     }
   });
   overlay.once('ready-to-show', () => {
     if (overlayVisible) overlay.showInactive(); // show WITHOUT activating
   });
+  addLog('info', `overlay started → ${s.server}, room "${s.room}"`);
 }
 
 // screen recorders / meeting apps grab topmost — take it back periodically
@@ -91,7 +106,7 @@ function openSettings() {
   if (settingsWin) { settingsWin.show(); settingsWin.focus(); return; }
   settingsWin = new BrowserWindow({
     width: 440,
-    height: 500,
+    height: 520,
     resizable: false,
     title: 'TeleCaption Settings',
     webPreferences: {
@@ -128,38 +143,68 @@ function togglePanel() {
   panel.on('closed', () => { panel = null; });
 }
 
+// brief center-screen eye indicator when captions are toggled
+function showEyeToast(on) {
+  if (toast && !toast.isDestroyed()) toast.destroy();
+  const wa = screen.getPrimaryDisplay().workArea;
+  toast = new BrowserWindow({
+    width: 160,
+    height: 150,
+    x: wa.x + Math.round((wa.width - 160) / 2),
+    y: wa.y + Math.round(wa.height * 0.22),
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    hasShadow: false,
+    show: false,
+    webPreferences: { contextIsolation: true }
+  });
+  toast.setAlwaysOnTop(true, 'screen-saver');
+  toast.setIgnoreMouseEvents(true);
+  toast.loadFile('toast.html', { query: { on: on ? '1' : '0' } });
+  toast.once('ready-to-show', () => toast.showInactive());
+  setTimeout(() => { if (toast && !toast.isDestroyed()) toast.destroy(); toast = null; }, 1500);
+}
+
 function toggleOverlay() {
   if (!overlay) return;
   overlayVisible = !overlayVisible;
   if (overlayVisible) overlay.showInactive(); else overlay.hide();
+  addLog('info', overlayVisible ? 'captions shown' : 'captions hidden');
+  showEyeToast(overlayVisible);
+  if (panel && !panel.isDestroyed()) panel.webContents.send('state', { visible: overlayVisible });
   buildTray();
 }
 
-// tiny green-dot tray icon drawn at runtime (no binary asset needed)
-function trayIcon() {
-  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">' +
-    '<circle cx="8" cy="8" r="6" fill="#4caf50"/>' +
-    '<circle cx="8" cy="8" r="2.5" fill="#ffffff"/></svg>';
-  return nativeImage.createFromDataURL('data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64'));
+function trayImg() {
+  return nativeImage.createFromPath(
+    path.join(__dirname, 'assets', overlayVisible ? 'tray-on.png' : 'tray-off.png')
+  );
 }
 
 function buildTray() {
-  if (!tray) tray = new Tray(trayIcon());
-  tray.setToolTip('TeleCaption');
+  if (!tray) tray = new Tray(trayImg()); else tray.setImage(trayImg());
+  tray.setToolTip('TeleCaption — captions ' + (overlayVisible ? 'ON' : 'OFF'));
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Settings…', click: openSettings },
     { label: 'Control panel  (Ctrl+Alt+U)', click: togglePanel },
     { label: (overlayVisible ? 'Hide' : 'Show') + ' captions  (Ctrl+Alt+T)', click: toggleOverlay },
     { type: 'separator' },
-    { label: 'Quit', click: () => app.quit() }
+    { label: 'Quit  (Ctrl+Alt+Q)', click: () => app.quit() }
   ]));
   tray.on('double-click', openSettings);
 }
 
 ipcMain.handle('load-settings', () => loadSettings());
+ipcMain.handle('get-state', () => ({ visible: overlayVisible }));
+ipcMain.handle('get-logs', () => logs);
+ipcMain.on('log', (e, level, msg) => addLog(level, msg));
 
 ipcMain.on('save-settings', (e, s) => {
   saveSettings(Object.assign(loadSettings(), s));
+  addLog('info', 'settings saved — restarting overlay');
   createOverlay();
   if (settingsWin) settingsWin.close();
 });
@@ -174,18 +219,21 @@ ipcMain.on('update-cfg', (e, patch) => {
 
 ipcMain.on('close-panel', () => { if (panel) panel.close(); });
 ipcMain.on('toggle-captions', toggleOverlay);
+ipcMain.on('quit-app', () => app.quit());
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
   // relaunching the installed app while it runs in tray → bring the UI up
-  app.on('second-instance', () => openSettings());
+  app.on('second-instance', () => { addLog('info', 'launched again — showing Settings'); openSettings(); });
 
   app.whenReady().then(() => {
+    addLog('info', `TeleCaption v${app.getVersion()} started`);
     buildTray();
     globalShortcut.register('CommandOrControl+Alt+T', toggleOverlay);
     globalShortcut.register('CommandOrControl+Alt+U', togglePanel);
+    globalShortcut.register('CommandOrControl+Alt+Q', () => app.quit());
     openSettings();   // UI shows on every launch
     createOverlay();  // captions start alongside if already configured
   });

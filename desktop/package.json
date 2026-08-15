@@ -1,6 +1,6 @@
 {
   "name": "telecaption-desktop",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "TeleCaption overlay — live captions from your phone, on top of any app",
   "main": "main.js",
@@ -23,6 +23,7 @@
       "overlay.html",
       "settings.html",
       "panel.html",
+      "toast.html",
       "assets/**"
     ],
     "mac": {

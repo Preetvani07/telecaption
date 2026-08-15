@@ -24,8 +24,10 @@ wss.on('connection', (ws) => {
       if (!room) return;
       if (ws.room && rooms.has(ws.room)) rooms.get(ws.room).delete(ws);
       ws.room = room;
+      ws.role = msg.role || 'unknown';
       if (!rooms.has(room)) rooms.set(room, new Set());
       rooms.get(room).add(ws);
+      console.log(`join: role=${ws.role} room=${room} peers=${rooms.get(room).size}`);
       ws.send(JSON.stringify({ type: 'joined', room, peers: rooms.get(room).size }));
     } else if (msg.type === 'caption' && ws.room && rooms.has(ws.room)) {
       const out = data.toString();
@@ -38,6 +40,7 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     if (ws.room && rooms.has(ws.room)) {
       rooms.get(ws.room).delete(ws);
+      console.log(`leave: role=${ws.role} room=${ws.room} peers=${rooms.get(ws.room).size}`);
       if (rooms.get(ws.room).size === 0) rooms.delete(ws.room);
     }
   });

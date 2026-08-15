@@ -10,7 +10,7 @@
     user-select: none; overflow: hidden;
   }
   #panel { padding: 16px 18px; display: flex; flex-direction: column; height: calc(100% - 32px); }
-  #head { display: flex; align-items: center; margin-bottom: 14px; }
+  #head { display: flex; align-items: center; margin-bottom: 10px; }
   #head h2 { flex: 1; margin: 0; font-size: 16px; }
   .iconbtn {
     width: 28px; height: 28px; margin-left: 6px;
@@ -18,28 +18,46 @@
     background: #232a31; color: #e8eaed; font-size: 14px; font-weight: 700;
   }
   .iconbtn:hover { background: #2e363e; }
-  label { display: block; margin: 14px 0 4px; font-size: 13px; color: #9aa0a6; }
+  label { display: block; margin: 12px 0 4px; font-size: 13px; color: #9aa0a6; }
   .val { float: right; color: #4caf50; font-weight: 600; }
   input[type=range] { width: 100%; accent-color: #4caf50; }
+  .row { display: flex; align-items: center; margin-top: 12px; font-size: 13px; color: #9aa0a6; }
+  .row input { margin-right: 8px; accent-color: #4caf50; }
   .btn {
-    margin-top: 18px; width: 100%; padding: 10px;
+    margin-top: 12px; width: 100%; padding: 10px;
     border: 0; border-radius: 8px; cursor: pointer;
     background: #232a31; color: #fff; font-size: 14px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
   }
   .btn:hover { background: #2e363e; }
+  .btn svg { width: 18px; height: 18px; }
+  #toggleCap.on { border: 1px solid #2e7d32; }
+  #toggleCap.off { border: 1px solid #b23b32; color: #ffb4ab; }
+  #quit { background: #3a2224; color: #ffb4ab; }
+  #quit:hover { background: #4a2a2c; }
   .hint { margin-top: auto; font-size: 11px; color: #6b7278; line-height: 1.5; }
 
-  #shortcuts {
+  .sheet {
     position: absolute; inset: 0;
     background: rgba(10,12,14,.97);
     padding: 18px; display: none;
+    box-sizing: border-box;
   }
-  #shortcuts.open { display: block; }
-  #shortcuts h3 { margin: 0 0 14px; font-size: 15px; }
+  .sheet.open { display: flex; flex-direction: column; }
+  .sheet h3 { margin: 0 0 12px; font-size: 15px; }
+  .sheet .x { position: absolute; top: 12px; right: 14px; }
   #shortcuts table { width: 100%; border-collapse: collapse; font-size: 13px; }
   #shortcuts td { padding: 7px 0; border-bottom: 1px solid #232a31; }
   #shortcuts td:first-child { color: #ffd54f; white-space: nowrap; padding-right: 12px; }
-  #sc-close { position: absolute; top: 12px; right: 14px; }
+  #loglist {
+    flex: 1; overflow-y: auto; margin-top: 4px;
+    font-family: Consolas, monospace; font-size: 11px; line-height: 1.6;
+    background: #0e1114; border-radius: 8px; padding: 8px 10px;
+  }
+  .le-info { color: #9aa0a6; }
+  .le-warn { color: #ffd54f; }
+  .le-error { color: #ff8a80; }
+  #copyLogs { margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -50,28 +68,43 @@
     <button class="iconbtn" id="close" title="Close panel">✕</button>
   </div>
 
+  <button class="btn" id="toggleCap"></button>
+
   <label>Font size <span class="val" id="fsVal"></span></label>
   <input type="range" id="fs" min="16" max="96" step="1">
 
   <label>Caption stays on screen <span class="val" id="durVal"></span></label>
   <input type="range" id="dur" min="0" max="30" step="1">
 
-  <button class="btn" id="toggleCap">Hide / show captions</button>
+  <div class="row">
+    <input type="checkbox" id="ghost">
+    <span>Show faint caption box when idle</span>
+  </div>
+
+  <button class="btn" id="showLogs">Logs</button>
+  <button class="btn" id="quit">Quit TeleCaption</button>
 
   <div class="hint">
     Changes apply instantly and are saved.<br>
-    Duration 0 = captions never fade.<br>
-    Ctrl/Cmd+Alt+U closes this panel.
+    Duration 0 = captions never fade.
   </div>
 </div>
 
-<div id="shortcuts">
-  <button class="iconbtn" id="sc-close" title="Close">✕</button>
+<div id="shortcuts" class="sheet">
+  <button class="iconbtn x" id="sc-close" title="Close">✕</button>
   <h3>Keyboard shortcuts</h3>
   <table>
     <tr><td>Ctrl/Cmd + Alt + U</td><td>Show / hide this control panel</td></tr>
-    <tr><td>Ctrl/Cmd + Alt + T</td><td>Show / hide captions overlay</td></tr>
+    <tr><td>Ctrl/Cmd + Alt + T</td><td>Show / hide captions (eye indicator confirms)</td></tr>
+    <tr><td>Ctrl/Cmd + Alt + Q</td><td>Quit app completely (also from background)</td></tr>
   </table>
+</div>
+
+<div id="logsheet" class="sheet">
+  <button class="iconbtn x" id="log-close" title="Close">✕</button>
+  <h3>Session logs</h3>
+  <div id="loglist"></div>
+  <button class="btn" id="copyLogs">Copy logs</button>
 </div>
 
 <script>
@@ -79,6 +112,18 @@
   const dur = document.getElementById('dur');
   const fsVal = document.getElementById('fsVal');
   const durVal = document.getElementById('durVal');
+  const ghost = document.getElementById('ghost');
+  const toggleCap = document.getElementById('toggleCap');
+  const loglist = document.getElementById('loglist');
+
+  const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const EYEOFF = '<svg viewBox="0 0 24 24" fill="none" stroke="#f44336" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
+
+  function setEye(visible) {
+    toggleCap.innerHTML = (visible ? EYE : EYEOFF) +
+      '<span>' + (visible ? 'Captions visible — click to hide' : 'Captions hidden — click to show') + '</span>';
+    toggleCap.className = 'btn ' + (visible ? 'on' : 'off');
+  }
 
   function labels() {
     fsVal.textContent = fs.value + ' px';
@@ -88,16 +133,51 @@
   window.api.load().then(s => {
     fs.value = s.fontSize;
     dur.value = s.duration;
+    ghost.checked = s.ghost !== false;
     labels();
   });
+  window.api.getState().then(st => setEye(st.visible));
+  window.api.onState(st => setEye(st.visible));
 
-  fs.oninput = () => { labels(); window.api.updateCfg({ fontSize: parseInt(fs.value, 10) }); };
-  dur.oninput = () => { labels(); window.api.updateCfg({ duration: parseInt(dur.value, 10) }); };
+  // debounce slider writes so dragging doesn't spam disk
+  let deb = null;
+  function push(patch) {
+    clearTimeout(deb);
+    deb = setTimeout(() => window.api.updateCfg(patch), 120);
+  }
+  fs.oninput = () => { labels(); push({ fontSize: parseInt(fs.value, 10) }); };
+  dur.oninput = () => { labels(); push({ duration: parseInt(dur.value, 10) }); };
+  ghost.onchange = () => window.api.updateCfg({ ghost: ghost.checked });
 
-  document.getElementById('toggleCap').onclick = () => window.api.toggleCaptions();
+  toggleCap.onclick = () => window.api.toggleCaptions();
   document.getElementById('close').onclick = () => window.api.closePanel();
+  document.getElementById('quit').onclick = () => window.api.quit();
   document.getElementById('help').onclick = () => document.getElementById('shortcuts').classList.add('open');
   document.getElementById('sc-close').onclick = () => document.getElementById('shortcuts').classList.remove('open');
+
+  // ---- logs ----
+  function addLine(l) {
+    const d = document.createElement('div');
+    d.className = 'le-' + l.level;
+    d.textContent = `${l.t}  ${l.msg}`;
+    loglist.appendChild(d);
+    loglist.scrollTop = loglist.scrollHeight;
+  }
+  document.getElementById('showLogs').onclick = async () => {
+    loglist.innerHTML = '';
+    (await window.api.getLogs()).forEach(addLine);
+    document.getElementById('logsheet').classList.add('open');
+  };
+  document.getElementById('log-close').onclick = () => document.getElementById('logsheet').classList.remove('open');
+  window.api.onLog(l => {
+    if (document.getElementById('logsheet').classList.contains('open')) addLine(l);
+  });
+  document.getElementById('copyLogs').onclick = async () => {
+    const logs = await window.api.getLogs();
+    await navigator.clipboard.writeText(logs.map(l => `${l.t} [${l.level}] ${l.msg}`).join('\n'));
+    document.getElementById('copyLogs').textContent = 'Copied ✓';
+    setTimeout(() => { document.getElementById('copyLogs').textContent = 'Copy logs'; }, 1500);
+  };
 </script>
 </body>
 </html>
